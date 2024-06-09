@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import Restaurant from '../models/restaurant';
 import cloudinary from 'cloudinary';
 import mongoose from 'mongoose';
+import Order from '../models/order';
 
 const getMyRestaurant = async (req: Request, res: Response) => {
   try {
@@ -14,6 +15,24 @@ const getMyRestaurant = async (req: Request, res: Response) => {
     res.json(myRestaurant);
   } catch (error) {
     res.status(500).json({ message: '伺服器錯誤' });
+  }
+};
+
+const getMyRestaurantOrders = async (req: Request, res: Response) => {
+  try {
+    const restaurant = await Restaurant.findOne({ user: req.userId });
+
+    if (!restaurant) {
+      return res.status(404).json({ message: '找不到餐廳' });
+    }
+
+    const orders = await Order.find({ restaurant: restaurant._id })
+      .populate('restaurant')
+      .populate('user');
+
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ massage: '伺服器錯誤' });
   }
 };
 
@@ -79,4 +98,44 @@ async function uploadImage(file: Express.Multer.File) {
   return uploadResponse.url;
 }
 
-export default { getMyRestaurant, createMyRestaurant, updateMyRestaurant };
+const updateOrderStatus = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ message: '找不到訂單' });
+    }
+
+    const restaurant = await Restaurant.findById(order.restaurant);
+
+    if (restaurant?.user?._id.toString() !== req.userId) {
+      return res.status(401).json({ message: '非餐廳擁有者' });
+    }
+
+    order.status = status;
+    if (status === '待付款') {
+      if (order.paidAt) {
+        order.paidAt = null;
+      }
+    } else if (status === '已付款') {
+      order.paidAt = new Date();
+    }
+
+    await order.save();
+
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ message: '伺服器錯誤' });
+  }
+};
+
+export default {
+  getMyRestaurantOrders,
+  getMyRestaurant,
+  createMyRestaurant,
+  updateMyRestaurant,
+  updateOrderStatus,
+};

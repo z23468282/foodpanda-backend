@@ -19,9 +19,10 @@ const orderSchema = new mongoose.Schema({
   totalAmount: Number,
   status: {
     type: String,
-    enum: ['待付款', '已付款', '處理中', '已發貨', '運輸中'],
+    enum: ['待付款', '已付款', '處理中', '運輸中', '已送達'],
   },
   createdAt: { type: Date, default: Date.now() },
+  paidAt: Date,
 });
 
 const Order = mongoose.model('Order', orderSchema);

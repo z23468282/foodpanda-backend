@@ -22,6 +22,18 @@ type CheckoutSessionRequest = {
   restaurantId: string;
 };
 
+const getMyOrders = async (req: Request, res: Response) => {
+  try {
+    const orders = await Order.find({ user: req.userId })
+      .populate('restaurant')
+      .populate('user');
+
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: '伺服器錯誤' });
+  }
+};
+
 const stripeWebhookHandler = async (req: Request, res: Response) => {
   let event;
   try {
@@ -42,7 +54,7 @@ const stripeWebhookHandler = async (req: Request, res: Response) => {
       return res.status(404).json({ message: '訂單未找到' });
     }
 
-    order.totalAmount = (event.data.object.amount_total as number) / 100;
+    order.paidAt = new Date();
     order.status = '已付款';
 
     await order.save();
@@ -63,12 +75,29 @@ const createCheckoutSession = async (req: Request, res: Response) => {
       throw new Error('找不到餐廳');
     }
 
+    const getTotalAmount = () => {
+      let sum = 0;
+
+      checkoutSessionRequest.cartItems.map((cartItem) => {
+        const menuItem = restaurant.menuItems.find(
+          (item) => item._id.toString() === cartItem.menuItemId.toString()
+        );
+
+        if (menuItem) sum += menuItem.price * parseInt(cartItem.quantity);
+      });
+
+      const totalAmount = sum + restaurant.price;
+
+      return totalAmount;
+    };
+
     const newOrder = new Order({
       restaurant: restaurant,
       user: req.userId,
       status: '待付款',
       deliveryDetails: checkoutSessionRequest.deliveryDetails,
       cartItems: checkoutSessionRequest.cartItems,
+      totalAmount: getTotalAmount(),
       createdAt: new Date(),
     });
 
@@ -87,6 +116,7 @@ const createCheckoutSession = async (req: Request, res: Response) => {
     if (!session.url) {
       return res.status(500).json({ message: '無法創建stripe session' });
     }
+    console.log(newOrder);
 
     await newOrder.save();
 
@@ -158,4 +188,4 @@ const createSession = async (
   return sessionData;
 };
 
-export default { createCheckoutSession, stripeWebhookHandler };
+export default { getMyOrders, createCheckoutSession, stripeWebhookHandler };
